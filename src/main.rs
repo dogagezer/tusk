@@ -3,8 +3,11 @@ use std::{
     fs::{read_to_string, write},
     io,
 };
-
+use colored::Colorize;
 use clap::{Parser, Subcommand};
+use comfy_table::presets::UTF8_FULL;
+use comfy_table::*;
+use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -110,17 +113,19 @@ enum Command {
 
 fn load_tasks_from_file(filename: &str) -> Result<HashMap<String, Account>, io::Error> {
     // Attempt to read the file
-    match read_to_string(filename) {
-        Ok(contents) => {
-            // If the file exists and has content, deserialize the data
-            serde_json::from_str(&contents).map_err(Into::into)
+    let contents = match read_to_string(filename) {
+        Ok(contents) => contents,
+        Err(ref err) if err.kind() == io::ErrorKind::NotFound => {
+            // If the file does not exist, return an empty HashMap
+            return Ok(HashMap::new());
         }
-        Err(_) => {
-            // If the file does not exist or cannot be read, return an empty HashMap
-            Ok(HashMap::new())
-        }
-    }
+        Err(err) => return Err(err),
+    };
+
+    // If the file exists and has content, deserialize the data
+    serde_json::from_str(&contents).map_err(Into::into)
 }
+
 
 fn save_tasks_to_file(filename: &str, accounts: &HashMap<String, Account>) -> Result<(), io::Error> {
     let serialized_data = serde_json::to_string(accounts)?;
@@ -144,14 +149,34 @@ fn handle_delete_command(acc: &str, id: usize, accounts: &mut HashMap<String, Ac
 
 fn handle_list_command(acc: &str, accounts: &HashMap<String, Account>) {
     if let Some(account) = accounts.get(acc) {
-        match account.tasks.len() {
-            0 => println!("No tasks available for account '{}'!", acc),
-            _ => {
-                println!("Tasks for account '{}':", acc);
-                account.tasks.iter().enumerate().for_each(|(index, task)| {
-                    println!("{}. [{}] {}", index + 1, if task.completed { "X" } else { " " }, task.description);
-                });
-            }
+        let mut table = Table::new();
+        table.load_preset(UTF8_FULL)
+            .set_content_arrangement(ContentArrangement::Dynamic)
+            .set_width(80)
+            .set_header(vec![
+                Cell::new("ID").fg(Color::Green),
+                Cell::new("Status").fg(Color::Green),
+                Cell::new("Description").fg(Color::Green),
+            ]);
+
+        for (index, task) in account.tasks.iter().enumerate() {
+            let status = if task.completed { "X" } else { " " };
+            let mut description_cell = Cell::new(task.description.clone());
+            if !task.completed {
+                description_cell = description_cell.add_attribute(Attribute::SlowBlink);
+            }else { description_cell= description_cell.fg(Color::Green)}
+            table.add_row(vec![
+                Cell::new(format!("{}", index + 1)),
+                Cell::new(status),
+                description_cell,
+            ]);
+        }
+
+        if table.is_empty() {
+            println!("No tasks available for account '{}'!", acc);
+        } else {
+            println!("Tasks for account '{}':", acc);
+            println!("{table}");
         }
     } else {
         println!("Account '{}' not found. Please create it first.", acc);
@@ -216,26 +241,51 @@ fn main() -> Result<(), io::Error> {
             handle_clear_command(&acc, &mut accounts);
         }
         _ => {
-            let help_page = r#"
-Welcome to TUSK!
-
-This CLI app helps you manage your tasks across different accounts.
-
+            let welcome = "🐘 Welcome to TUSK! 📝".yellow().bold();
+            let usage = r#"
 Usage:
     task_manager [SUBCOMMAND]
-
-Subcommands:
-    add       Add a new task to an account       tusk add --acc <account_name> --description "Task description"
-    delete    Delete a task from an account      tusk delete --acc <account_name> --id <task_id>
-    complete  Mark a task as completed           tusk complete --acc <account_name> --id <task_id>
-    uncomplete    Mark a completed task as incomplete   tusk incomplete --acc <account_name> --id <task_id>
-    list      List all tasks for an account      tusk list --acc <account_name>
-    clear     Clear all tasks for an account     tusk clear --acc <account_name>
-
-
-Enjoy managing your tasks efficiently with TUSK :)!
-"#;
-            println!("{}", help_page);
+"#.green().bold();
+            let mut table = Table::new();
+            table
+                .load_preset(UTF8_FULL)
+                .apply_modifier(UTF8_ROUND_CORNERS)
+                .set_content_arrangement(ContentArrangement::DynamicFullWidth)
+                .set_width(120)
+                .add_row(vec![
+                    Cell::new("➕ add").fg(Color::Blue).set_alignment(CellAlignment::Left),
+                    Cell::new("Add a new task to an account").set_alignment(CellAlignment::Left),
+                    Cell::new("tusk add --acc <account_name> --description \"Task description\"").set_alignment(CellAlignment::Left),
+                ])
+                .add_row(vec![
+                    Cell::new("🗑️ delete").fg(Color::Blue).set_alignment(CellAlignment::Left),
+                    Cell::new("Delete a task from an account").set_alignment(CellAlignment::Left),
+                    Cell::new("tusk delete --acc <account_name> --id <task_id>").set_alignment(CellAlignment::Left),
+                ])
+                .add_row(vec![
+                    Cell::new("✅ complete").fg(Color::Blue).set_alignment(CellAlignment::Left),
+                    Cell::new("Mark a task as completed").set_alignment(CellAlignment::Left),
+                    Cell::new("tusk complete --acc <account_name> --id <task_id>").set_alignment(CellAlignment::Left),
+                ])
+                .add_row(vec![
+                    Cell::new("❎ uncomplete").fg(Color::Blue).set_alignment(CellAlignment::Left),
+                    Cell::new("Mark a completed task as incomplete").set_alignment(CellAlignment::Left),
+                    Cell::new("tusk incomplete --acc <account_name> --id <task_id>").set_alignment(CellAlignment::Left),
+                ])
+                .add_row(vec![
+                    Cell::new("📋 list").fg(Color::Blue).set_alignment(CellAlignment::Left),
+                    Cell::new("List all tasks for an account").set_alignment(CellAlignment::Left),
+                    Cell::new("tusk list --acc <account_name>").set_alignment(CellAlignment::Left),
+                ])
+                .add_row(vec![
+                    Cell::new("🧹 clear").fg(Color::Blue).set_alignment(CellAlignment::Left),
+                    Cell::new("Clear all tasks for an account").set_alignment(CellAlignment::Left),
+                    Cell::new("tusk clear --acc <account_name>").set_alignment(CellAlignment::Left),
+                ]);
+            println!("{}", welcome);
+            println!("{}", usage);
+            println!("{table}");
+            println!("{}", "Enjoy managing your tasks efficiently with TUSK! 😊".bright_magenta().bold());
         }
     }
     save_tasks_to_file(filename, &accounts)?;
