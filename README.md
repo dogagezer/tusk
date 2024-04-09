@@ -26,7 +26,7 @@ cargo build --release
 After compiling the code, you can run the TUSK CLI using the following command:
 
 ```bash
-./target/release/tusk [SUBCOMMAND]
+./target/debug/tusk [SUBCOMMAND]
 ```
 
 ### Subcommands
@@ -44,13 +44,13 @@ After compiling the code, you can run the TUSK CLI using the following command:
 
 ```bash
 # Add a task to the "work" account
-./target/release/tusk add work "Prepare presentation slides"
+./target/debug/tusk add work "Prepare presentation slides"
 
 # Mark task ID 3 in the "personal" account as completed
-./target/release/tusk complete personal 3
+./target/debug/tusk complete personal 3
 
 # List all tasks in the "work" account
-./target/release/tusk list work
+./target/debug/tusk list work
 ```
 
 ## License
