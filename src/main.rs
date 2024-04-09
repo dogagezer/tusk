@@ -10,10 +10,28 @@ use comfy_table::*;
 use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, Copy, Clone)]
+pub enum Priority {
+    High,
+    Medium,
+    Low,
+}
+impl Priority {
+    pub fn from_str(s: String) -> Option<Self> {
+        match s.as_str() {
+            "high" => Some(Self::High),
+            "medium" => Some(Self::Medium),
+            "low" => Some(Self::Low),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Task {
     description: String,
     completed: bool,
+    priority: Priority,
 }
 
 impl Task {
@@ -21,6 +39,14 @@ impl Task {
         Task {
             description,
             completed: false,
+            priority: Priority::Low,
+        }
+    }
+    pub fn with_priority(description: String, priority: Priority) -> Self {
+        Task {
+            description,
+            completed: false,
+            priority,
         }
     }
 
@@ -28,7 +54,7 @@ impl Task {
         self.completed = true;
     }
 
-    pub fn uncomplete(&mut self) {
+    pub fn incomplete(&mut self) {
         self.completed = false;
     }
 }
@@ -54,6 +80,11 @@ impl Account {
         self.tasks.push(task);
     }
 
+    pub fn add_task_with_priority(&mut self, description: String, priority: Priority) {
+        let task = Task::with_priority(description, priority);
+        self.tasks.push(task);
+    }
+
     pub fn delete_task(&mut self, id: usize) {
         if id > 0 && id <= self.tasks.len() {
             self.tasks.remove(id - 1);
@@ -69,9 +100,9 @@ impl Account {
         }
     }
 
-    pub fn uncomplete_task(&mut self, id: usize) -> Result<(), &'static str> {
+    pub fn incomplete_task(&mut self, id: usize) -> Result<(), &'static str> {
         if let Some(task) = self.tasks.get_mut(id - 1) {
-            task.uncomplete();
+            task.incomplete();
             Ok(())
         } else {
             Err("Invalid task index")
@@ -80,18 +111,6 @@ impl Account {
 
     pub fn clear_tasks(&mut self) {
         self.tasks.clear();
-    }
-
-    pub fn display_tasks(&self) {
-        match self.tasks.len() {
-            0 => println!("No tasks available for account '{}'!", self.name),
-            _ => {
-                println!("Tasks for account '{}':", self.name);
-                self.tasks.iter().enumerate().for_each(|(index, task)| {
-                    println!("{}. [{}] {}", index + 1, if task.completed { "X" } else { " " }, task.description);
-                });
-            }
-        }
     }
 }
 
@@ -104,11 +123,13 @@ struct Cli {
 #[derive(Subcommand, Debug)]
 enum Command {
     Add { acc: String, description: String },
+    Addp { acc: String, description: String, priority: String },
     List { acc: String },
     Delete { acc: String, id: usize },
     Complete { acc: String, id: usize },
-    Uncomplete { acc: String, id: usize },
+    Incomplete { acc: String, id: usize },
     Clear { acc: String },
+    Bara,
 }
 
 fn load_tasks_from_file(filename: &str) -> Result<HashMap<String, Account>, io::Error> {
@@ -121,11 +142,9 @@ fn load_tasks_from_file(filename: &str) -> Result<HashMap<String, Account>, io::
         }
         Err(err) => return Err(err),
     };
-
     // If the file exists and has content, deserialize the data
     serde_json::from_str(&contents).map_err(Into::into)
 }
-
 
 fn save_tasks_to_file(filename: &str, accounts: &HashMap<String, Account>) -> Result<(), io::Error> {
     let serialized_data = serde_json::to_string(accounts)?;
@@ -135,6 +154,15 @@ fn save_tasks_to_file(filename: &str, accounts: &HashMap<String, Account>) -> Re
 
 fn handle_add_command(acc: &str, description: String, accounts: &mut HashMap<String, Account>) {
     accounts.entry(acc.to_string()).or_insert_with(|| Account::new(acc.to_string())).add_task(description);
+    println!("Task added to account '{}'!", acc);
+}
+
+fn handle_addp_command(acc: &str, description: String, priority: String, accounts: &mut HashMap<String, Account>) {
+    let priority_type_p = Priority::from_str(priority).unwrap_or_else(|| {
+        eprintln!("Invalid priority! Priority set to default LOW");
+        Priority::Low
+    });
+    accounts.entry(acc.to_string()).or_insert_with(|| Account::new(acc.to_string())).add_task_with_priority(description, priority_type_p);
     println!("Task added to account '{}'!", acc);
 }
 
@@ -152,23 +180,29 @@ fn handle_list_command(acc: &str, accounts: &HashMap<String, Account>) {
         let mut table = Table::new();
         table.load_preset(UTF8_FULL)
             .set_content_arrangement(ContentArrangement::Dynamic)
-            .set_width(80)
             .set_header(vec![
                 Cell::new("ID").fg(Color::Green),
                 Cell::new("Status").fg(Color::Green),
                 Cell::new("Description").fg(Color::Green),
+                Cell::new("Priority").fg(Color::Green),
             ]);
 
         for (index, task) in account.tasks.iter().enumerate() {
             let status = if task.completed { "X" } else { " " };
             let mut description_cell = Cell::new(task.description.clone());
+            let priority_colour = match task.priority {
+                Priority::High => "High".red(),
+                Priority::Medium => "Medium".yellow(),
+                Priority::Low => "Low".green(),
+            };
             if !task.completed {
                 description_cell = description_cell.add_attribute(Attribute::SlowBlink);
-            }else { description_cell= description_cell.fg(Color::Green)}
+            } else { description_cell = description_cell.fg(Color::Green) }
             table.add_row(vec![
                 Cell::new(format!("{}", index + 1)),
                 Cell::new(status),
                 description_cell,
+                Cell::new(priority_colour),
             ]);
         }
 
@@ -196,9 +230,9 @@ fn handle_complete_command(acc: &str, id: usize, accounts: &mut HashMap<String, 
     }
 }
 
-fn handle_uncomplete_command(acc: &str, id: usize, accounts: &mut HashMap<String, Account>) {
+fn handle_incomplete_command(acc: &str, id: usize, accounts: &mut HashMap<String, Account>) {
     if let Some(account) = accounts.get_mut(acc) {
-        match account.uncomplete_task(id) {
+        match account.incomplete_task(id) {
             Ok(_) => handle_list_command(acc, accounts),
             Err(err) => println!("No such task: {}", err),
         }
@@ -225,20 +259,49 @@ fn main() -> Result<(), io::Error> {
         Some(Command::Add { description, acc }) => {
             handle_add_command(&acc, description, &mut accounts);
         }
+        Some(Command::Addp { description, acc, priority }) => {
+            handle_addp_command(&acc, description, priority, &mut accounts);
+        }
         Some(Command::Delete { id, acc }) => {
             handle_delete_command(&acc, id, &mut accounts);
         }
         Some(Command::Complete { id, acc }) => {
             handle_complete_command(&acc, id, &mut accounts);
         }
-        Some(Command::Uncomplete { id, acc }) => {
-            handle_uncomplete_command(&acc, id, &mut accounts);
+        Some(Command::Incomplete { id, acc }) => {
+            handle_incomplete_command(&acc, id, &mut accounts);
         }
         Some(Command::List { acc }) => {
             handle_list_command(&acc, &accounts);
         }
         Some(Command::Clear { acc }) => {
             handle_clear_command(&acc, &mut accounts);
+        }
+        Some(Command::Bara) => {
+            let capy = r#"
+            ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣠⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣸⣝⣧⣀⣠⡶⢿⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⢀⣀⣠⠤⠤⠖⠚⠛⠉⢙⠁⠈⢈⠟⢽⢿⣄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⣴⠋⣍⣠⡄⠀⠀⠀⠶⠶⣿⡷⡆⠘⠀⠈⠀⠉⠻⢦⣀⠀⠀⠀⠀⠀⠀⠀⣀⣀⣀⣀⣤⣤⠦⠦⠦⠤⠤⢤⣤⣤⣀⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⢰⠇⠀⢸⠋⠀⠀⠀⠀⠀⠀⠈⠁⠀⠀⠀⠀⠀⠀⠀⠀⠙⠓⠲⠤⠴⠖⠒⠛⠉⠉⢉⡀⠀⠀⠙⢧⡤⡄⠀⢲⡖⠀⠈⠉⠛⠲⢦⣀⠀⠀⠀⠀⠀⠀
+⢸⠀⠀⢸⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⠉⠡⠤⠀⠀⠰⠾⠧⠀⠀⠿⠦⠉⠉⠀⠶⢭⡉⠃⠀⣉⠳⣤⡀⠀⠀⠀
+⠸⣆⢠⡾⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡘⠇⢠⣄⠀⠦⣌⠛⠂⠻⣆⠀⠀
+⠀⠹⣦⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣇⠀⢠⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠁⠀⠈⣹⠀⠀⡀⠐⣄⠙⣧⡀
+⠀⠀⠀⠉⠙⠒⠒⠒⠒⠒⠶⣦⣀⡽⠆⠀⢳⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢲⠀⠙⠦⠈⠀⢹⡇
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣞⢧⠐⢷⠀⢰⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢦⡀⠈⢳⠀⣿
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢯⢇⡀⠃⠈⢳⠀⢳⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠃⠀⡈⠀⣻
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢳⡝⠶⢦⡀⣆⠀⠛⠀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠠⠇⢀⡟
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⡠⣄⠙⠀⠸⠄⢻⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⡤⠀⠀⠀⠀⠀⠀⠀⠀⣠⠆⠀⡼⠃
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢳⣌⠠⣄⠰⡆⢸⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⠏⣾⡽⡀⠀⠀⠀⠀⢠⡴⠊⠉⢠⡾⠁⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣄⡈⡀⠀⣾⣥⣤⣀⣀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡏⣠⠈⢡⡇⠀⠀⡀⠀⠘⠞⣠⡴⠋⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠨⣧⠃⠑⠀⣷⡏⠉⠈⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⢳⠿⢢⡈⣇⠀⢸⣿⣧⣦⠾⣿⠉⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⠦⠰⢾⢻⡇⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢧⠈⠣⠸⠄⣴⢿⠋⠁⠀⠻⣦⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣸⡀⡆⠸⢸⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢳⡆⢀⣀⡈⢫⣷⠀⢀⣴⠟⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣠⡤⠞⠉⠃⢠⣧⡾⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣾⣧⠎⠉⡽⢋⠏⠀⣼⠏⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣽⡿⣭⣿⣏⡴⠞⠋⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣠⡴⣶⡞⠋⢩⣏⣴⠯⠴⠋⠀⣰⠋⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⠻⠿⠿⣺⡧⠶⠚⠉⠙⠓⠒⠒⠚⠁⠀⠀⠀⠀⠀⠀⠀
+"#.green().bold();
+            println!("{}", capy);
         }
         _ => {
             let welcome = "🐘 Welcome to TUSK! 📝".yellow().bold();
@@ -268,7 +331,7 @@ Usage:
                     Cell::new("tusk complete --acc <account_name> --id <task_id>").set_alignment(CellAlignment::Left),
                 ])
                 .add_row(vec![
-                    Cell::new("❎ uncomplete").fg(Color::Blue).set_alignment(CellAlignment::Left),
+                    Cell::new("❎ incomplete").fg(Color::Blue).set_alignment(CellAlignment::Left),
                     Cell::new("Mark a completed task as incomplete").set_alignment(CellAlignment::Left),
                     Cell::new("tusk incomplete --acc <account_name> --id <task_id>").set_alignment(CellAlignment::Left),
                 ])
