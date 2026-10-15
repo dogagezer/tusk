@@ -1,0 +1,6 @@
+/target
+/tusk
+**/.DS_Store
+task_data.json
+.idea
+/opencode.jsonc
