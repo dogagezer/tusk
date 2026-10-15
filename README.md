@@ -51,35 +51,42 @@ cargo build --release
 
 ## Usage
 
-After compiling the code, you can run the TUSK CLI using the following command:
+With TUSK installed (or run as `./tusk` from the repository), use:
 
 ```bash
-./target/debug/tusk [SUBCOMMAND]
+tusk [SUBCOMMAND]
 ```
 
 ### Subcommands
-  ```
-  tusk add --acc <account_name> --description "Task description"
-  tusk delete --acc <account_name> --id <task_id>
-  tusk complete --acc <account_name> --id <task_id>
-  tusk uncomplete --acc <account_name> --id <task_id>
-  tusk list --acc <account_name>
-  tusk clear --acc <account_name>
-
-  ```
+```
+tusk add        <account_name> "<task description>"
+tusk addp       <account_name> "<task description>" <high|medium|low>
+tusk delete     <account_name> <task_id>
+tusk complete   <account_name> <task_id>
+tusk incomplete <account_name> <task_id>
+tusk list       <account_name>
+tusk clear      <account_name>
+tusk install    Install tusk to your PATH
+```
 
 ### Examples
 
 ```bash
 # Add a task to the "work" account
-./target/debug/tusk add work "Prepare presentation slides"
+tusk add work "Prepare presentation slides"
+
+# Add a high-priority task
+tusk addp work "Finish quarterly report" high
 
 # Mark task ID 3 in the "personal" account as completed
-./target/debug/tusk complete personal 3
+tusk complete personal 3
 
 # List all tasks in the "work" account
-./target/debug/tusk list work
+tusk list work
 ```
+
+If TUSK is not yet on your `PATH`, run `./tusk install` or use the
+one-line installer from the Installation section.
 
 ## License
 
