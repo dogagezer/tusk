@@ -7,6 +7,7 @@ ASSET=""
 
 OS="$(uname -s)"
 ARCH="$(uname -m)"
+VERSION="${VERSION:-latest}"
 
 case "$OS" in
   Linux)
@@ -15,13 +16,17 @@ case "$OS" in
       aarch64|arm64) ASSET="tusk-linux-aarch64" ;;
       *) echo "Unsupported Linux architecture: $ARCH" >&2; exit 1 ;;
     esac
+    VERSION="${VERSION:-latest}"
+    if [ "$VERSION" = "latest" ]; then
+      DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
+    else
+      DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${ASSET}"
+    fi
     ;;
   Darwin)
-    case "$ARCH" in
-      x86_64) ASSET="tusk-macos-x86_64" ;;
-      arm64|aarch64) ASSET="tusk-macos-aarch64" ;;
-      *) echo "Unsupported macOS architecture: $ARCH" >&2; exit 1 ;;
-    esac
+    # A universal macOS binary is committed in the repository, so installation
+    # works even before GitHub release assets are published.
+    DOWNLOAD_URL="https://raw.githubusercontent.com/${REPO}/main/releases/tusk-macos-universal"
     ;;
   *)
     echo "Unsupported OS: $OS" >&2
@@ -33,13 +38,6 @@ INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 if [ ! -w "$INSTALL_DIR" ]; then
   INSTALL_DIR="$HOME/.local/bin"
   mkdir -p "$INSTALL_DIR"
-fi
-
-VERSION="${VERSION:-latest}"
-if [ "$VERSION" = "latest" ]; then
-  DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
-else
-  DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${ASSET}"
 fi
 
 echo "Downloading ${ASSET} ${VERSION}..."

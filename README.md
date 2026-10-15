@@ -36,7 +36,16 @@ After downloading a binary directly, you can install it as the `tusk`
 command with:
 
 ```bash
-./tusk-macos-aarch64 install
+./tusk-macos-universal install
+```
+
+For macOS, a universal binary is always available directly from the
+repository:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dogagezer/tusk/main/releases/tusk-macos-universal -o tusk
+chmod +x tusk
+./tusk install
 ```
 
 ### Build from source (optional)
