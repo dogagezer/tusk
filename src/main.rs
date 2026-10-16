@@ -350,7 +350,7 @@ fn main() -> Result<(), io::Error> {
             let welcome = "🐘 Welcome to TUSK! 📝".yellow().bold();
             let usage = r#"
 Usage:
-    task_manager [SUBCOMMAND]
+    tusk [SUBCOMMAND]
 "#.green().bold();
             let mut table = Table::new();
             table
