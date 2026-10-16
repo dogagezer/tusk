@@ -1,4 +1,4 @@
-can we# TUSK - Task Management CLI
+# TUSK - Task Management CLI
 
 TUSK is a simple command-line task management tool that allows you to organize your tasks efficiently across multiple accounts.
 
